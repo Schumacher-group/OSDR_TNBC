@@ -2,18 +2,22 @@
 ## Specification vs. Implementation
 
 **Author**: Claude (Automated Analysis)
-**Date**: 2025-11-17
+**Date**: 2025-11-17 (Updated for OSDR 2.0)
 **Repository**: Schumacher-group/OSDR_TNBC
 **Implementation by**: Gabin Rousseau (MSc Bioinformatics)
-**Paper**: Somer et al. (2024) - One-Shot tissue Dynamics Reconstruction
+**Papers**:
+- **OSDR 1.0**: Somer et al. (2024) - One-Shot tissue Dynamics Reconstruction
+- **OSDR 2.0**: Shalom et al. (2025) - Cell state transitions and treatment response prediction
 
 ---
 
 ## Executive Summary
 
-This document provides a comprehensive gap analysis comparing the OSDR methodology as specified in Somer et al. (2024) with Gabin Rousseau's implementation for TNBC validation. The implementation successfully captures the **core validation workflow** (spatial simulation → sampling → logistic regression → phase portrait comparison), but several components specified in the paper are **not yet implemented** or differ from the paper's specifications.
+This document provides a comprehensive gap analysis comparing the OSDR methodology as specified in **Somer et al. (2024) v1.0** and **Shalom et al. (2025) v2.0** with Gabin Rousseau's implementation for TNBC validation. The implementation successfully captures the **core v1.0 validation workflow** (spatial simulation → sampling → logistic regression → phase portrait comparison), but several components are **not yet implemented** or differ from specifications.
 
-### Implementation Status Overview
+**UPDATE (2025-11-17):** Added analysis of OSDR 2.0 features, which introduce cell state transitions and dual-timescale dynamics. This significantly expands the gap between current implementation and state-of-the-art OSDR capabilities.
+
+### Implementation Status Overview: v1.0
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -24,6 +28,17 @@ This document provides a comprehensive gap analysis comparing the OSDR methodolo
 | Data sampling | ⚠️ **Differs** | Uniform vs. beta distribution for initial conditions |
 | Phase portrait analysis | ✅ **Implemented** | Fixed points, stability, streamlines all working |
 | Validation testing | ✅ **Exceeds** | Extensive robustness analysis across seeds/sample sizes |
+
+### Implementation Status Overview: v2.0 (NEW)
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Cell state transitions | ❌ **Not Implemented** | Entire state machinery missing |
+| State marker processing | ❌ **Not Implemented** | No PD1, SMA, PDGFRB, PDPN processing |
+| State probability regression | ❌ **Not Implemented** | Would need multivariate models |
+| Two-step simulation | ❌ **Not Implemented** | No state equilibration step |
+| Dual timescale framework | ❌ **Not Implemented** | Conceptual framework missing |
+| Treatment response prediction | ❌ **Not Implemented** | No longitudinal trajectory code |
 
 ---
 
@@ -779,18 +794,505 @@ The activity log reveals the **iterative development process**:
 **Week 1-2**: Struggled with ODE formulation
 > "ChatGPT estimated... that the optimal solution didn't make sense (negative a) for this equation format."
 
-**Week 3**: Breakthrough with model definition
-> "I should probably first focus on model estimation to pinpoint what's the best way to define the model."
+## Appendix D: OSDR 2.0 GAP ANALYSIS
 
-**Week 7-8**: Sample size discovery
-> "Unfortunately, a strong inconsistency remains in the models which doesn't appear to improve over time... 8 [good graphs] were distributed among 10k+ samples."
+### Overview
 
-**Week 9**: Success with corrected model
-> "PORTRAITS ARE VERY PROMISING: ALL 4 were good for seed 0, t=1000."
+OSDR 2.0 (Shalom et al. 2025) represents a **major methodological advancement** over v1.0, adding the capability to model **cell state transitions** in addition to population dynamics. This appendix analyzes the gaps between Gabin's current implementation and the v2.0 specification.
 
-**Week 10**: Polished visualizations and robustness testing
+---
 
-**Key Lesson**: The implementation evolved through **scientific iteration**, not just coding. Gabin discovered empirically that sample size (not time point) is the critical factor for inference quality.
+### D.1 Cell State Transitions
+
+#### Specification (v2.0)
+
+**Core Innovation:**
+- Models probabilistic transitions between functional states within a cell type
+- Examples: PD1+/PD1− T cells, CAF/resting fibroblasts
+- State probability = f(neighborhood cell TYPE composition)
+
+**Mathematical Model:**
+```
+P(cell in state α | neighborhood) = 1 / (1 + exp(-(β0 + Σ β_i × N_i)))
+```
+Where N_i = count of cell type i in neighborhood
+
+**Key Features:**
+- Binary state classification (α vs ᾱ)
+- Multivariate logistic regression (all cell types as features)
+- Regression coefficients reveal which cell types favor/inhibit states
+- Highly significant associations (p << 10^-10)
+- Probability varies 2.5-3x across neighborhoods
+
+#### Implementation Status
+
+- ❌ **COMPLETELY MISSING**
+- No state tracking in tissue dataframe
+- No state marker columns
+- No state probability models
+- No state classification logic
+
+#### Gap Impact
+
+**Priority**: 🔴 **CRITICAL for v2.0**
+
+**Required for:**
+- Understanding cell plasticity in tumor microenvironment
+- Improved treatment response prediction (AUC 0.94-0.99)
+- Mechanistic insights (e.g., PD1+ T cells suppress cancer)
+
+**Blocker for:**
+- Any v2.0 validation
+- Enhanced predictive modeling
+- State-dependent biological insights
+
+---
+
+### D.2 State Marker Processing
+
+#### Specification (v2.0)
+
+**Required Markers:**
+
+**T cell states (PD1):**
+- PD1 (Programmed Death-1): Immune checkpoint marker
+- High PD1 → exhausted state
+- Low PD1 → functional state
+
+**Fibroblast states (CAF):**
+- SMA (Smooth Muscle Actin): Myofibroblast marker
+- PDGFRB (PDGF Receptor Beta): Growth factor signaling
+- PDPN (Podoplanin): Lymphatic/CAF marker
+
+**Processing Pipeline:**
+1. Marker intensity extraction from IMC/spatial data
+2. Threshold determination (median split or Gaussian mixture)
+3. Binary classification (state+ vs state−)
+4. Validation against published classifications
+
+#### Implementation Status
+
+- ❌ **NOT IMPLEMENTED**
+- Real dataset may contain marker columns but unused
+- No threshold selection code
+- No marker normalization
+- No state assignment
+
+#### Gap Details
+
+**Missing Components:**
+1. `process_state_marker(df, marker, threshold)` function
+2. Automatic threshold detection (e.g., Gaussian mixture)
+3. Quality control for marker intensities
+4. Validation against ground truth (if available)
+
+**Data Exploration Needed:**
+```python
+# Example exploration code (not in repo)
+tnbc_df.columns  # Check for PD1, SMA, PDGFRB, PDPN
+tnbc_df['PD1'].describe()  # Distribution stats
+tnbc_df['PD1'].hist()  # Visualize distribution
+```
+
+#### Gap Impact
+
+**Priority**: 🔴 **HIGH for v2.0**
+
+**Prerequisite for:**
+- State transition modeling
+- State-specific analysis
+- CAF/PD1+ identification
+
+**Implementation Effort**: 🟡 **Medium** (similar to Ki67 processing)
+
+---
+
+### D.3 Two-Step Simulation Algorithm
+
+#### Specification (v2.0)
+
+**Dual-Timescale Framework:**
+- **Fast dynamics (hours-days):** Cell state transitions
+- **Slow dynamics (weeks):** Population changes (division/death)
+- **Key assumption:** States equilibrate between population timesteps
+
+**Algorithm:**
+```python
+for step in range(n_steps):
+    # Step 1: Population dynamics (v1.0 - implemented)
+    tissue = update_populations(tissue)  # division + death
+
+    # Step 2: State equilibration (v2.0 - NOT implemented)
+    tissue = equilibrate_states(tissue, state_models)
+
+    record_tissue(tissue, step)
+```
+
+**Step 2 Details:**
+1. Recompute neighborhoods (after population change)
+2. Evaluate state probabilities for all cells
+3. Sample new states from probability distributions
+4. Update tissue dataframe with new states
+
+#### Implementation Status
+
+- ⚠️ **STEP 1 IMPLEMENTED** (population dynamics)
+- ❌ **STEP 2 MISSING** (state equilibration)
+
+**Current Code:**
+- `tissue_proliferation()` does Step 1 only
+- No state update logic
+- No state model calls
+- Would require modification to simulation loop
+
+#### Gap Details
+
+**Missing Function:**
+```python
+def equilibrate_states(tissue, state_models, cells=CELLS):
+    """
+    Update cell states based on current neighborhoods (v2.0).
+
+    Fast dynamics assumption: states instantly equilibrate.
+
+    Parameters:
+    - tissue: Current tissue state (with neighborhoods)
+    - state_models: Dict of logistic regression models per cell type
+    - cells: List of cell type labels
+
+    Returns:
+    - tissue: Updated with new state assignments
+    """
+    for cell_type in cells:
+        if cell_type not in state_models:
+            continue  # No state model for this type
+
+        # Get cells of this type
+        mask = tissue['Cell_Type'] == cell_type
+        cells_of_type = tissue[mask]
+
+        # Compute features (all cell type counts)
+        X = cells_of_type[['#F_neighbours', '#M_neighbours']].values
+
+        # Predict state probabilities
+        P_state = state_models[cell_type].predict_proba(X)[:, 1]
+
+        # Sample states (stochastic)
+        rng = np.random.default_rng()
+        new_states = rng.binomial(1, P_state)
+
+        # Update tissue
+        tissue.loc[mask, 'State'] = new_states
+
+    return tissue
+```
+
+**Required Dataframe Changes:**
+- Add `State` column (e.g., 'PD1+', 'PD1-', 'CAF', 'Resting')
+- Or add binary state indicator column per cell type
+
+#### Gap Impact
+
+**Priority**: 🔴 **CRITICAL for v2.0 simulation**
+
+**Enables:**
+- Temporal tracking of state distributions
+- State-population feedback dynamics
+- Prediction of state trajectories
+
+**Implementation Effort**: 🟡 **Medium**
+- Function complexity: Low (straightforward logistic application)
+- Integration complexity: Medium (modify existing simulation loop)
+- Testing complexity: Medium (validate quasi-steady-state assumption)
+
+---
+
+### D.4 Multivariate Feature Models (v2.0 Enhancement)
+
+#### Specification (v2.0)
+
+**Required for State Models:**
+- Use **all cell type** counts as features
+- Not just same-type neighbors (v1.0 simplification)
+
+**Example (T cell PD1 state):**
+```python
+X = [#B_cells, #T_cells, #Endothelial, #Macrophages, #Cancer]
+y = PD1_positive  # binary label
+model = LogisticRegression().fit(X, y)
+```
+
+**Biological Rationale:**
+- Cross-type interactions drive state changes
+- Example: Macrophages favor PD1+ state, fibroblasts disfavor it
+- Different from division (often same-type dominant)
+
+#### Implementation Status
+
+- ⚠️ **UNIVARIATE ONLY**
+- Current: `X = [#F_neighbours]` (same-type)
+- Should be: `X = [#F_neighbours, #M_neighbours, ...]` (all types)
+
+**Code Location:** `model_inference.py:175-178`
+```python
+# Current (univariate)
+X_f = df[["#F_neighbours"]].loc[df["Cell_Type"] == "F"]
+
+# Should be (multivariate for v2.0)
+X_f = df[["#F_neighbours", "#M_neighbours"]].loc[df["Cell_Type"] == "F"]
+```
+
+#### Gap Details
+
+**Change Required:**
+1. Modify feature selection in `tissue_regression()`
+2. Update to include all cell type neighbor counts
+3. Add interaction terms (optional, via feature engineering)
+4. Use cross-validation for feature selection (as in paper)
+
+**Minimal Fix:**
+```python
+# In model_inference.py
+# Replace univariate feature extraction with multivariate
+feature_cols = [f"#{ctype}_neighbours" for ctype in CELLS]
+X_f = df[feature_cols].loc[df["Cell_Type"] == "F"]
+X_m = df[feature_cols].loc[df["Cell_Type"] == "M"]
+```
+
+#### Gap Impact
+
+**Priority**: 🟡 **MEDIUM for v1.0, HIGH for v2.0**
+
+**v1.0 Impact:** Low (known model uses same-type)
+**v2.0 Impact:** High (state models require cross-type features)
+
+**Implementation Effort**: 🟢 **LOW** (5-10 lines of code)
+
+---
+
+### D.5 Treatment Response Prediction (v2.0 Application)
+
+#### Specification (v2.0)
+
+**Enhanced Predictive Power:**
+- Uses population dynamics + state transitions
+- Predicts 6-month treatment response from 3-week biopsy
+- 100 iterations with patient subsampling
+
+**Reported Performance:**
+| State Transition | Treatment Arm | AUC |
+|------------------|---------------|-----|
+| PD1 (T cells) | Chemotherapy | 0.94 |
+| PD1 (T cells) | Chemo + immunotherapy | 0.96 |
+| CAF (Fibroblasts) | Chemotherapy | 0.80 |
+| CAF (Fibroblasts) | Chemo + immunotherapy | 0.99 |
+
+**Mechanism Insights:**
+- **Responders:** Transient CAF rise → decline
+- **Non-responders:** Persistent CAF population
+- PD1+ T cells suppress cancer division in responders
+
+#### Implementation Status
+
+- ❌ **NOT IMPLEMENTED**
+- No longitudinal trajectory simulation
+- No treatment response classification
+- No AUC computation for prediction tasks
+
+#### Gap Details
+
+**Required Data:**
+1. Multi-timepoint biopsies (baseline, 3-week, 6-month)
+2. Clinical outcome labels (responder/non-responder)
+3. Treatment metadata (chemo vs chemo+immuno)
+
+**Required Code:**
+1. Trajectory simulation from t=3wk to t=6mo
+2. Outcome prediction from simulated trajectories
+3. Cross-validation with patient subsampling
+4. AUC computation and visualization
+
+**Data Availability:** ❓ **Unknown**
+- TNBC dataset may be single-timepoint
+- May not have treatment metadata
+- May not have response labels
+
+#### Gap Impact
+
+**Priority**: 🟡 **MEDIUM** (depends on data availability)
+
+**Scientific Value:** 🔴 **HIGH**
+- Demonstrates clinical utility of OSDR 2.0
+- Validates state transition dynamics
+- Provides actionable biomarkers
+
+**Blocker:** Data availability (not implementation)
+
+**Implementation Effort:** 🔴 **HIGH** (if data available)
+
+---
+
+### D.6 Summary: v2.0 Gap Prioritization
+
+| Gap Component | v1.0 Need | v2.0 Need | Data Dependency | Implementation Effort | Priority |
+|---------------|-----------|-----------|-----------------|----------------------|----------|
+| **State marker processing** | ❌ None | ✅ Critical | Medium (need markers) | Medium | 🔴 HIGH |
+| **Multivariate features** | ⚠️ Nice | ✅ Required | None | Low | 🟡 MEDIUM |
+| **State probability models** | ❌ None | ✅ Critical | High (need states) | Low | 🔴 HIGH |
+| **State equilibration step** | ❌ None | ✅ Critical | High (need models) | Medium | 🔴 HIGH |
+| **Dual timescale framework** | ❌ None | ✅ Conceptual | None | Low | 🟢 LOW |
+| **Treatment prediction** | ⚠️ Nice | ✅ Validation | Very High (longitudinal) | High | 🟡 MEDIUM |
+
+---
+
+### D.7 Implementation Roadmap: OSDR 2.0
+
+#### Phase 1: Data Readiness (Week 1-2)
+
+**Objective:** Determine what v2.0 features are possible with available data
+
+**Tasks:**
+1. ✅ Pull and review v2.0 preprint
+2. ⚠️ Explore TNBC dataset for state markers:
+   ```python
+   # Check for PD1, SMA, PDGFRB, PDPN columns
+   df.columns.tolist()
+   # Visualize marker distributions
+   for marker in ['PD1', 'SMA', 'PDGFRB', 'PDPN']:
+       if marker in df.columns:
+           df[marker].hist(bins=50)
+           plt.title(f'{marker} distribution')
+           plt.show()
+   ```
+3. Check for multi-timepoint samples (if any)
+4. Check for treatment metadata
+5. **Decision point:** Proceed with v2.0 only if sufficient markers exist
+
+#### Phase 2: State Classification (Week 3-4)
+
+**Prerequisites:** Phase 1 identifies usable state markers
+
+**Tasks:**
+1. Implement marker threshold selection:
+   - Median split (simple)
+   - Gaussian mixture (better for bimodal)
+2. Create binary state labels (α vs ᾱ)
+3. Validate against published classifications (if available)
+4. Add state columns to dataframe
+5. Visualize state distributions across cell types
+
+**Deliverable:** `process_state_markers.py` module
+
+#### Phase 3: Multivariate Models (Week 5-6)
+
+**Prerequisites:** Phase 2 complete
+
+**Tasks:**
+1. Modify `tissue_regression()` for multivariate features
+2. Fit state probability models (logistic regression)
+3. Validate with likelihood ratio test
+4. Compare vs shuffled control
+5. Visualize regression coefficients (which types favor/disfavor states)
+
+**Deliverable:** Extended `model_inference.py` with state models
+
+#### Phase 4: Two-Step Simulation (Week 7-8)
+
+**Prerequisites:** Phase 3 complete
+
+**Tasks:**
+1. Implement `equilibrate_states()` function
+2. Modify `tissue_proliferation()` to call state update
+3. Add state tracking to recorded tissue snapshots
+4. Validate quasi-steady-state assumption
+5. Generate temporal plots of state distributions
+
+**Deliverable:** OSDR 2.0 simulation framework
+
+#### Phase 5: Validation (Week 9-10)
+
+**Prerequisites:** Phase 4 complete
+
+**Tasks:**
+1. Simulate with known state transition model
+2. Verify OSDR 2.0 recovers state dynamics
+3. Create phase portraits with state dimensions (if 2D)
+4. Test sample size requirements for state inference
+5. Compare v1.0 vs v2.0 validation results
+
+**Deliverable:** `5_osdr2_validation.ipynb`
+
+#### Phase 6: Real Data Application (Week 11-12)
+
+**Prerequisites:** All phases complete + data available
+
+**Tasks:**
+1. Apply OSDR 2.0 to TNBC biopsies
+2. Infer population + state dynamics
+3. Visualize state trajectories
+4. If longitudinal data: Test treatment prediction
+5. Interpret biological findings
+
+**Deliverable:** OSDR 2.0 analysis results
+
+---
+
+### D.8 Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| **State markers unavailable** | Medium | High | Focus on v1.0 completion; contact data authors |
+| **Marker quality poor** | Medium | Medium | Test multiple threshold methods; manual curation |
+| **No longitudinal data** | High | Medium | Skip treatment prediction; validate on simulations only |
+| **State models don't converge** | Low | Medium | Increase sample size; check for batch effects |
+| **Timescale assumption invalid** | Low | High | Validate with sensitivity analysis; slower equilibration |
+| **Implementation too complex** | Low | Low | Incremental approach; test each component separately |
+
+---
+
+### D.9 Expected Outcomes
+
+**If Successful (all data available):**
+- ✅ First complete open-source OSDR 2.0 implementation
+- ✅ Validation of state transition dynamics on TNBC data
+- ✅ Treatment response prediction (if longitudinal data exists)
+- ✅ Mechanistic insights into CAF/PD1+ dynamics
+- ✅ Publication-quality results for MSc thesis
+
+**If Partial (markers only, no longitudinal):**
+- ✅ OSDR 2.0 simulation framework validated
+- ✅ State probability models fitted to TNBC snapshots
+- ✅ Cross-sectional state-neighborhood associations
+- ⚠️ No temporal validation of state trajectories
+- ⚠️ No treatment prediction AUC
+
+**If Minimal (no state markers):**
+- ✅ Complete OSDR 1.0 validation (current trajectory)
+- ✅ Documented gap analysis for v2.0
+- ✅ Conceptual understanding of v2.0 framework
+- ❌ No state dynamics implementation
+
+---
+
+### D.10 Comparison: v1.0 vs v2.0 Implementation Status
+
+| Capability | v1.0 Spec | v1.0 Impl | v2.0 Spec | v2.0 Impl | Gap v1.0 | Gap v2.0 |
+|------------|-----------|-----------|-----------|-----------|----------|----------|
+| **Population dynamics** | ✅ | ✅ | ✅ | ✅ | None | None |
+| **Spatial neighborhoods** | ✅ | ⚠️ | ✅ | ⚠️ | Edge corr | Edge corr |
+| **Ki67 division marker** | ✅ | ❌ | ✅ | ❌ | Pipeline | Pipeline |
+| **Logistic regression** | ✅ | ⚠️ | ✅ | ⚠️ | Multivar | Multivar |
+| **Phase portraits** | ✅ | ✅ | ✅ | ✅ | None | None |
+| **State transitions** | ❌ | ❌ | ✅ | ❌ | N/A | **Full** |
+| **State markers** | ❌ | ❌ | ✅ | ❌ | N/A | **Full** |
+| **State models** | ❌ | ❌ | ✅ | ❌ | N/A | **Full** |
+| **Two-step simulation** | ❌ | ❌ | ✅ | ❌ | N/A | **Full** |
+| **Treatment prediction** | ⚠️ | ❌ | ✅ | ❌ | Optional | **Full** |
+
+**Summary:**
+- **v1.0 completion:** ~80% (core validation works, missing real data features)
+- **v2.0 completion:** ~30% (population dynamics only, all state features missing)
+- **v2.0 gap size:** ~70% (large, but builds on v1.0 foundation)
 
 ---
 
